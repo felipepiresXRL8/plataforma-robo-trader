@@ -25,6 +25,5 @@
     "typescript",
     "fastapi"
   ],
-  "author": "",
-  "license": "MIT"
+  "author": ""
 }

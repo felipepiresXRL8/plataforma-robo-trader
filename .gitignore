@@ -56,6 +56,11 @@ coverage/
 *.db-wal
 *.db-shm
 
+# Personal documents
+*.pdf
+*.tex
+curriculo_*
+
 # OS and IDE files
 .DS_Store
 Thumbs.db

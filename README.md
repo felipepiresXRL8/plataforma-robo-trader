@@ -1,41 +1,40 @@
-# 📈 Plataforma de Trading + Robô Quant + Agente de IA
+# Plataforma de Trading Quantitativo com LightGBM e Agente IA
 
-Sistema completo e modular de análise quantitativa, execução de estratégias de trading com **Machine Learning (LightGBM)**, persistência relacional em **SQL (SQLite)**, geração de teses de investimento com **IA Generativa (Google Gemini API)** e interface estilo **Home Broker** em **React**.
+Plataforma modular para análise quantitativa de ações da B3, integrando pipeline de engenharia de features, modelo supervisionado de Machine Learning (LightGBM com validação Walk-Forward), persistência relacional em SQL puro (SQLite), agente explicativo fundamentado em métricas com a API do Google Gemini e interface web em React.
 
 ---
 
-## 🏛️ 1. Arquitetura do Sistema
+## 1. Arquitetura do Sistema
 
 ```mermaid
 flowchart TB
-    subgraph Frontend ["🖥️ Frontend (React + Vite + TypeScript + Tailwind)"]
-        UI_List["Sidebar: Cesta Ibovespa\n(Preço & Variação Diária)"]
-        UI_Chart["Gráfico Candlestick & Volume\n(TradingView Lightweight Charts)"]
-        UI_Robot["Painel do Robô Quant\n(Sinal, Confiança & Feature Importance)"]
-        UI_Gemini["Card IA Gemini\n(Tese de Investimento & Riscos)"]
-        UI_Trades["Paper Trading Modal\n(Ordens & Portfólio)"]
+    subgraph Frontend ["Frontend (React + TypeScript + Tailwind)"]
+        UI_List["Lista de Ativos Ibovespa\n(Preço e Variação Diária)"]
+        UI_Chart["Gráfico OHLCV e Volume\n(Lightweight Charts)"]
+        UI_Robot["Painel Quant\n(Sinal, Confiança e Feature Importance)"]
+        UI_Gemini["Card IA Gemini\n(Tese e Fatores de Risco)"]
+        UI_Trades["Modal de Paper Trading\n(Ordens e Portfólio)"]
     end
 
-    subgraph Backend ["⚙️ Backend Modular (Node.js + TypeScript + Express)"]
-        Ctrl["Controllers / Middlewares\n(Zod Schemas Validation)"]
-        Serv["Services Layer\n(Market, Robot, Trade, Gemini)"]
-        Repo["Repositories (Data Access Layer)\n(SQL Queries / DAO Pattern)"]
-        DB[(Banco de Dados SQL\nSQLite / WebAssembly)]
+    subgraph Backend ["Backend Modular (Node.js + TypeScript + Express)"]
+        Ctrl["Controllers e Middlewares\n(Validação de Schemas com Zod)"]
+        Serv["Camada de Serviços\n(Market, Robot, Trade, Gemini)"]
+        Repo["Repositórios (Data Access Layer)\n(Consultas SQL / Repository Pattern)"]
+        DB[(Banco de Dados Relacional\nSQLite via WebAssembly)]
     end
 
-    subgraph QuantBot ["🤖 Microserviço Quant (Python + FastAPI)"]
-        Fetcher["Data Fetcher\n(yfinance OHLCV B3)"]
+    subgraph QuantBot ["Microserviço Quant (Python + FastAPI)"]
+        Fetcher["Data Ingestion\n(yfinance OHLCV B3)"]
         Pipeline["Feature Engineering\n(RSI, EMA 9/21, Bollinger, Volatilidade, Lags)"]
         ML["Modelo LightGBM\n(Classificação Binária Regularizada)"]
         WFV["Walk-Forward Validation\n(Rolling Window Out-of-Sample)"]
-        Backtest["Backtesting Engine\n(Sharpe Ratio, MDD vs Buy-and-Hold)"]
+        Backtest["Motor de Backtesting\n(Retorno, Sharpe, MDD vs Buy-and-Hold)"]
     end
 
-    subgraph AI ["✨ Camada de IA (Google Gemini API)"]
-        GeminiSDK["Gemini 1.5/2.0 Flash\n(Prompt Tipado com Dados Numéricos Reais)"]
+    subgraph AI ["Camada de IA (Google Gemini API)"]
+        GeminiSDK["Gemini SDK\n(Prompt Estruturado com Indicadores Reais)"]
     end
 
-    %% Fluxos
     UI_List -->|GET /api/market/summary| Ctrl
     UI_Chart -->|GET /api/market/history/:ticker| Ctrl
     UI_Robot -->|POST /api/robot/analyze/:ticker| Ctrl
@@ -45,162 +44,178 @@ flowchart TB
     Serv --> Repo
     Repo --> DB
 
-    Serv -->|HTTP /api/analyze/:ticker| QuantBot
+    Serv -->|POST /api/analyze/:ticker| QuantBot
     Fetcher --> Pipeline --> ML
     ML --> WFV
     ML --> Backtest
 
-    Serv -->|Payload Numérico Estruturado| GeminiSDK
-    GeminiSDK -->|Tese & Fatores de Risco| Serv
+    Serv -->|Payload Quantitativo| GeminiSDK
+    GeminiSDK -->|Tese Técnica| Serv
 ```
 
 ---
 
-## 🎯 2. Decisões Arquiteturais & Justificativas Técnicas (Para Entrevista)
+## 2. Decisões de Engenharia de Software e Banco de Dados
 
-### 🧱 Backend & Engenharia de Software
-- **Separação de Responsabilidades (SoC) & Clean Layered Architecture:**
-  - `controllers/`: Responsáveis apenas por receber HTTP, validar schemas via **Zod** e formatar responses.
-  - `services/`: Contêm a lógica de negócio e orquestração entre banco de dados, microserviço Python e API do Gemini.
-  - `repositories/`: Isolam 100% das queries SQL do restante da aplicação (Repository Pattern).
-  - `clients/`: Comunicação HTTP tipada com microserviços externos e resiliência via fallbacks.
-- **Inversão de Dependência & Testabilidade:**
-  - O banco de dados e repositórios são injetados nas camadas superiores, permitindo rodar testes unitários e de integração instantâneos em instâncias isoladas em memória (`:memory:`), sem dependência de infraestrutura externa.
+### Arquitetura em Camadas e Inversão de Dependência
+O backend foi estruturado em camadas explícitas para garantir separação de responsabilidades e testabilidade:
+- **`controllers/`**: Recebe requisições HTTP, executa validação de tipos em tempo de execução com `zod` e padroniza respostas.
+- **`services/`**: Concentra regras de negócio e orquestra a comunicação entre o banco SQL, o microserviço Python e o SDK do Gemini.
+- **`repositories/`**: Encapsula todas as operações de banco de dados via Repository Pattern.
+- **`clients/`**: Clientes HTTP tipados com timeout e fallback local para garantir tolerância a falhas.
 
-### 💾 Persistência SQL Avançada
-- **Esquema Relacional Estrito:** Tabelas normalizadas com chaves primárias, integridade referencial (`FOREIGN KEY ... ON DELETE CASCADE`), restrições `CHECK` (`confidence BETWEEN 0 AND 1`, `action IN ('BUY', 'SELL')`).
-- **Índices Compostos de Performance:** 
+A injeção de dependência na inicialização (`createApp(customDb)`) permite instanciar o banco em memória (`:memory:`) durante os testes unitários e de integração, eliminando dependência de containers ou serviços externos no CI.
+
+### Persistência Relacional com SQL Puro
+Utilizou-se SQLite com schema normalizado e constraints de integridade:
+- **Chaves estrangeiras e integridade referencial**: `FOREIGN KEY (signal_id) REFERENCES trade_signals(id) ON DELETE CASCADE`.
+- **Validação no banco**: `CHECK (confidence >= 0.0 AND confidence <= 1.0)`, `CHECK (action IN ('BUY', 'SELL'))`.
+- **Índices compostos para séries temporais**:
   ```sql
   CREATE INDEX idx_prices_ticker_timestamp ON historical_prices (ticker, timestamp DESC);
   CREATE INDEX idx_signals_ticker_created ON trade_signals (ticker, created_at DESC);
   ```
-- **Window Functions Analíticas:** A lista de ativos calcula variação diária nominal e percentual através de CTEs e `ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY timestamp DESC)`.
+- **Window Functions em consultas analíticas**: A listagem de ativos com cotação atual e variação do dia anterior utiliza CTEs com `ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY timestamp DESC)` para evitar múltiplas queries por ativo.
 
 ---
 
-### 📊 Robô Trader Quantitativo (Estatística & Machine Learning)
+## 3. Modelo Estatístico e Machine Learning
 
-#### Formulação do Problema
-O robô trata a previsão de mercado como um problema de **Classificação Binária Supervisionada**:
-$$\hat{y}_t = \mathbb{P}\left(\frac{\text{Close}_{t+1} - \text{Close}_t}{\text{Close}_t} > \tau \;\middle|\; X_t\right)$$
-Onde $X_t$ é o vetor de atributos extraídos no fechamento do candle $t$, e $\tau$ é o threshold mínimo de retorno.
+### Formulação do Problema
+O modelo formula a decisão direcional como um problema de classificação binária supervisionada: prever a probabilidade do retorno no próximo pregão ($t+1$) ser positivo a partir do vetor de variáveis observáveis no fechamento do dia ($t$):
 
-#### Como o Gradient Boosting (LightGBM) Funciona?
-Diferente de algoritmos paralelos como Random Forest (Bagging), o **Gradient Boosting** constrói árvores sequencialmente:
-1. Começa com uma previsão constante $f_0(x) = \arg\min_\gamma \sum \mathcal{L}(y_i, \gamma)$.
-2. A cada iteração $m$, calcula os **pseudo-resíduos de gradiente**:
-   $$g_{im} = -\left[ \frac{\partial \mathcal{L}(y_i, f(x_i))}{\partial f(x_i)} \right]_{f = f_{m-1}}$$
-3. Ajusta uma nova árvore de decisão $h_m(x)$ sobre esses resíduos e atualiza o modelo com taxa de aprendizado $\eta$:
-   $$f_m(x) = f_{m-1}(x) + \eta \cdot h_m(x)$$
+$$P(y_t = 1 \mid X_t) \quad \text{onde} \quad y_t = \mathbb{I}\left(\frac{\text{Close}_{t+1} - \text{Close}_t}{\text{Close}_t} > 0\right)$$
 
-#### Regularização contra Overfitting em Finanças
-Dados financeiros possuem baixo sinal-ruído. Para conter o sobreajuste:
-- **Profundidade rasa:** `max_depth = 4`, `num_leaves = 15`.
-- **Taxa de aprendizado baixa:** `learning_rate = 0.03`.
-- **Amostragem aleatória:** `subsample = 0.8`, `colsample_bytree = 0.8`.
-- **Penalização:** Regularização L1 (`reg_alpha = 0.1`) e L2 (`reg_lambda = 1.0`).
+### Algoritmo: LightGBM e Regularização
+O Gradient Boosting constrói árvores de decisão de forma sequencial, onde cada árvore subsequente ajusta os resíduos de gradiente da função de perda logarítmica (Log-Loss) das iterações anteriores.
 
-#### Validação Walk-Forward (Rolling Window Time-Series Split)
-> ⚠️ **Por que NUNCA usar K-Fold CV em finanças?**
-> K-Fold tradicional quebra a causalidade temporal e causa **vazamento de dados (lookahead bias/data leakage)**, permitindo que o modelo "veja" o futuro para prever o passado.
-> 
-> A **Validação Walk-Forward** treina o modelo estritamente na janela histórica $[0, T]$ e testa na janela subsequente $[T+1, T+k]$, rolando a janela ao longo do tempo para mensurar a verdadeira robustez out-of-sample.
+Devido ao baixo sinal-ruído típico de dados de mercado, foram adotados hiperparâmetros restritivos para mitigar sobreajuste (overfitting):
+- `max_depth = 4` e `num_leaves = 15` (árvores rasas para evitar memorização de ruído).
+- `learning_rate = 0.03` com `n_estimators = 120`.
+- `subsample = 0.8` e `colsample_bytree = 0.8` (amostragem aleatória de linhas e colunas por split).
+- `reg_alpha = 0.1` (regularização L1) e `reg_lambda = 1.0` (regularização L2).
 
-#### Feature Engineering Pipeline
-- **RSI (14 períodos):** Momentum e zonas de exaustão com suavização exponencial de Wilder.
-- **Spread EMA (9/21):** $\frac{\text{EMA}_9 - \text{EMA}_{21}}{\text{EMA}_{21}}$, medindo alinhamento de médias de curto e médio prazo.
-- **Bandas de Bollinger (%B e Bandwidth):** Volatilidade relativa e distanciamento do desvio padrão.
-- **Volatilidade Realizada:** Desvio padrão móvel dos retornos anualizado ($\sigma \times \sqrt{252}$).
-- **Retornos Defasados (Lags $t-1, t-2, t-3, t-5$):** Autocorrelação e dependência serial.
-- **Volume Ratio:** Volume atual normalizado pela média móvel de 20 pregões.
+### Pipeline de Feature Engineering
+O cálculo de indicadores técnicos é desacoplado do treinamento para garantir que não haja vazamento temporal (*lookahead bias*):
+- **RSI (14 períodos)**: Suavização exponencial de Wilder para medir momentum e exaustão.
+- **Spread EMA (9/21)**: Razão percentual `(EMA_9 - EMA_21) / EMA_21` para capturar convergência/divergência de médias.
+- **Bandas de Bollinger (%B e Bandwidth)**: Posição do fechamento em relação ao desvio padrão móvel de 20 dias.
+- **Volatilidade Realizada**: Desvio padrão dos retornos diários em janela móvel de 20 pregões, anualizado ($\sigma \times \sqrt{252}$).
+- **Retornos Defasados (Lags 1, 2, 3, 5)**: Retornos históricos para capturar dependência serial e reversão à média.
+- **Volume Ratio**: Volume do dia dividido pela média móvel de volume de 20 dias.
 
-#### Métricas & Comparação com Baseline (Buy-and-Hold)
-- **Sharpe Ratio Anualizado:** $\text{Sharpe} = \frac{\bar{r}_p - r_f}{\sigma_p} \sqrt{252}$ (utilizando CDI/Selic anualizado como taxa livre de risco).
-- **Drawdown Máximo (MDD):** Queda percentual máxima do topo ao fundo da curva de patrimônio (*Equity Curve*).
-- **Win Rate & Profit Factor:** Eficiência e taxa de acerto dos trades simulados.
+### Validação Walk-Forward (Rolling Windows)
+Em séries temporais financeiras, a validação cruzada tradicional K-Fold é inadequada por quebrar a ordem cronológica e introduzir vazamento de dados futuros no conjunto de treino.
+
+A validação foi implementada via **Walk-Forward com Janelas Deslizantes**:
+1. Treino inicial na janela histórica $[0, T_{\text{train}}]$ (mínimo de 252 pregões / ~1 ano).
+2. Avaliação estritamente fora da amostra (*out-of-sample*) no trimestre subsequente $[T_{\text{train}}, T_{\text{train}} + T_{\text{test}}]$.
+3. Deslocamento da janela no tempo e repetição do processo ao longo de todo o histórico.
 
 ---
 
-### 🤖 4. Camada de IA Explicativa com Google Gemini
-Em vez de um prompt genérico, o backend extrai o payload numérico consolidado do modelo e envia um prompt tipado:
-- Ticker, Setor e Preço atual.
-- Recomendação Quantitativa e Grau de Confiança do LightGBM.
-- RSI exato, Spread de Médias, Volatilidade e Volume Ratio.
-- **Top 3 Variáveis de Maior Peso (Feature Importance nativo).**
-- O Gemini sintetiza esses dados em uma **tese de investimento profissional**, fundamentada nos números exatos, elencando riscos e sentimento de mercado.
+## 4. Resultados de Validação e Backtest Empírico
+
+Abaixo estão os resultados reais obtidos na validação fora da amostra (*Out-of-Sample Walk-Forward*) em uma amostra de ativos da B3 no período de 3 anos (amostra de ~475 pregões out-of-sample):
+
+| Ativo | Amostra OOS | Acurácia OOS | Retorno Estratégia | Retorno Buy-and-Hold | Max Drawdown (Estratégia) | Max Drawdown (Buy-and-Hold) | Win Rate Trades |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **PETR4.SA** | 476 dias | 46.85% | **+22.83%** | +46.76% | **-16.32%** | -22.16% | 51.72% |
+| **VALE3.SA** | 475 dias | 48.21% | **+13.54%** | +45.01% | **-14.57%** | -20.16% | 48.00% |
+| **WEGE3.SA** | 476 dias | 50.84% | **+10.93%** | -4.40% | **-15.54%** | -38.19% | 48.44% |
+| **BBAS3.SA** | 475 dias | 45.47% | **-21.92%** | -21.35% | **-24.00%** | -37.65% | 45.34% |
+| **ITUB4.SA** | 476 dias | 46.01% | **-6.84%** | +42.49% | **-28.94%** | -22.51% | 49.36% |
+
+### Análise Crítica dos Resultados
+- **Acurácia em Finanças vs Outros Domínios**: Em dados diários de ações, a acurácia direcional out-of-sample oscila tipicamente entre 46% e 52%. Modelos quantitativos que apresentam acurácias in-sample superiores a 70% quase invariavelmente sofrem de *overfitting* ou vazamento de dados.
+- **Controle de Risco e Assimetria**: Em ativos em tendência de baixa ou lateralização prolongada (como WEGE3 e BBAS3 no período analisado), a estratégia conseguiu conter o rebaixamento máximo de capital (Drawdown de -15.5% vs -38.2% em WEGE3). Em cenários de forte rali direcional (como PETR4), o Buy-and-Hold mantém 100% de exposição e tende a superar estratégias com períodos desinvestidos.
 
 ---
 
-### 🖥️ 5. Frontend estilo Home Broker (React + TypeScript)
-- **Lista Vertical de Ativos Ibovespa:** Busca em tempo real, cotações e variações percentuais diárias coloridas.
-- **Gráfico Interativo Candlestick:** Construído com **TradingView Lightweight Charts**, com suporte a zoom, crosshair e seletores de tempo (1M, 3M, 6M, 1A).
-- **Painel de Ação Quant:** Botão de execução "Rodar Robô", badges de sinal (`COMPRA` verde, `VENDA` vermelho, `MANTER` amarelo), métricas técnicas e gráficos de Feature Importance.
-- **Paper Trading & Portfólio:** Modal para executar ordens simuladas e consultar histórico com volume total negociado.
+## 5. Integração com a API do Google Gemini
+
+A camada de IA generativa não atua como um wrapper genérico, mas como um sintetizador analítico que recebe o payload quantitativo estruturado gerado pelo modelo:
+- Ticker, setor e preço atual.
+- Sinal emitido (`BUY`, `SELL`, `HOLD`) e grau de confiança estatística ($P$).
+- Valores numéricos calculados (RSI exato, spread de médias, volatilidade realizada anualizada e volume ratio).
+- **Ranking das Top 3 features de maior peso na decisão da árvore** (Feature Importance nativo).
+
+O serviço (`GeminiService`) processa essas variáveis em um prompt tipado com restrição de schema JSON, retornando:
+1. Tese de investimento com citação obrigatória dos números reais.
+2. Classificação de sentimento (`BULLISH`, `BEARISH`, `NEUTRAL`).
+3. Mapeamento de fatores de risco objetivos da operação.
+4. Fallback determinístico estruturado para operação offline ou falha temporária de rede.
 
 ---
 
-## 🚀 6. Como Rodar o Projeto
+## 6. Frontend: Interface Estilo Home Broker
+
+Construído com React 18, TypeScript, Tailwind CSS e TradingView Lightweight Charts:
+- **Sidebar de Cotações**: Lista vertical de ativos com busca em tempo real, cotações e variação percentual do dia calculada no banco.
+- **Gráfico Interativo de Candlestick e Volume**: Renderização nativa com crosshair, ajuste de escala dinâmico e seletor de janelas temporais (1M, 3M, 6M, 1A).
+- **Painel Quant & Agente**: Exibição do sinal com badge visual, barra de confiança, grid de indicadores técnicos calculados, importância das variáveis e o parecer do Gemini.
+- **Paper Trading**: Execução de ordens simuladas com persistência direta na tabela `trades` do SQLite e visualização consolidada do portfólio.
+
+---
+
+## 7. Como Executar o Projeto
 
 ### Pré-requisitos
-- **Node.js:** v18+ (recomendado v20+)
-- **Python:** v3.10+
-- **npm**
+- Node.js 18+ (testado em v24)
+- Python 3.10+ (testado em v3.13)
+- npm
 
-### Passo 1: Instalação das Dependências
+### Instalação de Dependências
 ```bash
-# Na raiz do projeto:
+# Na raiz do repositório:
 npm --prefix backend install
 npm --prefix frontend install
 python -m pip install -r quant_bot/requirements.txt
 ```
 
-### Passo 2: Configuração de Variáveis de Ambiente
-O backend já possui um arquivo `.env.example`. Crie o `.env`:
+### Configuração de Ambiente
 ```bash
+# Copie o arquivo de exemplo no backend:
 cp backend/.env.example backend/.env
 ```
-*(Configure sua `GEMINI_API_KEY` no arquivo `backend/.env`. Se não configurada, o backend utiliza o modo fallback determinístico automaticamente).*
+*(Adicione sua `GEMINI_API_KEY` no `backend/.env`. Se não fornecida, o sistema opera automaticamente com o fallback determinístico integrado).*
 
-### Passo 3: Execução dos Testes Automatizados (100% de cobertura nos componentes críticos)
+### Execução dos Testes Automatizados
+O projeto conta com 28 testes automatizados cobrindo repositórios, serviços, regras de negócio, pipeline de features, validação sem lookahead bias e rotas da API:
 ```bash
 # Executa todos os testes (Backend Vitest + Python Pytest):
 npm run test:all
 
 # Ou individualmente:
-npm run test:backend   # 19 testes unitários e de integração
-npm run test:bot       # 9 testes automatizados de ML e FastAPI
+npm run test:backend   # 19 testes unitários e de integração (Vitest)
+npm run test:bot       # 9 testes de ML, features e API (Pytest)
 ```
 
-### Passo 4: Inicialização dos Serviços
-Abra 3 terminais (ou execute os comandos correspondentes):
+### Inicialização dos Serviços
+Abra 3 terminais para rodar os componentes:
 
 ```bash
-# Terminal 1 - Microserviço Quant (FastAPI - Porta 8000):
+# Terminal 1 - Microserviço Quant (FastAPI na porta 8000):
 npm run dev:bot
 
-# Terminal 2 - Backend REST API (Node.js/Express - Porta 3001):
+# Terminal 2 - Backend REST API (Node.js na porta 3001):
 npm run dev:backend
 
-# Terminal 3 - Frontend Home Broker (React/Vite - Porta 5173):
+# Terminal 3 - Frontend Web (Vite na porta 5173):
 npm run dev:frontend
 ```
 
-Acesse no navegador: **`http://localhost:5173`**
+Acesse a aplicação em: `http://localhost:5173`
 
 ---
 
-## 🌲 7. Histórico de Branches & Git Flow
+## 8. Estrutura de Branches e Histórico Git
 
-O repositório foi construído seguindo rigorosamente o padrão **Conventional Commits** e branches isoladas por módulo:
+O projeto foi desenvolvido seguindo o padrão Conventional Commits com merges estruturados:
 
-| Branch | Escopo / Módulo | Pull Request |
-| :--- | :--- | :--- |
-| `feature/backend-and-sql` | Backend Node.js + Express + SQL puro SQLite + Testes | PR #1 |
-| `feature/quant-robot-ml` | Robô Quant Python + LightGBM + Feature Engineering + Pytest | PR #2 |
-| `feature/frontend-dashboard` | Home Broker React + Candlesticks + Painel IA Gemini | PR #3 |
-| `feature/integration-and-docs` | Scripts de Orquestração + Documentação de Alto Nível | PR #4 |
-
----
-
-## 📄 Licença
-Projeto sob licença MIT. Desenvolvido para portfólio de Engenharia de Software e IA Aplicada.
+| Branch | Escopo |
+| :--- | :--- |
+| `feature/backend-and-sql` | Estrutura Node/TypeScript, schema SQLite, repositórios e testes |
+| `feature/quant-robot-ml` | Pipeline de features, LightGBM, validação Walk-Forward e FastAPI |
+| `feature/frontend-dashboard` | Home Broker em React, Lightweight Charts e integração com API |
+| `feature/integration-and-docs` | Scripts de monorepo, documentação técnica e dados empíricos |

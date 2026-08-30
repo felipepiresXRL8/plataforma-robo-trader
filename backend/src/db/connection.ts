@@ -15,6 +15,7 @@ export interface PreparedStatement<T = any> {
 export class AppDatabase {
   private db: SqlJsDatabase;
   private dbPath?: string;
+  private inTransaction = false;
 
   constructor(db: SqlJsDatabase, dbPath?: string) {
     this.db = db;
@@ -101,19 +102,27 @@ export class AppDatabase {
   }
 
   public transaction<R>(fn: () => R): R {
+    this.inTransaction = true;
     this.db.exec('BEGIN TRANSACTION;');
     try {
       const result = fn();
       this.db.exec('COMMIT;');
+      this.inTransaction = false;
       this.persist();
       return result;
     } catch (error) {
-      this.db.exec('ROLLBACK;');
+      this.inTransaction = false;
+      try {
+        this.db.exec('ROLLBACK;');
+      } catch {
+        // Ignora erro se a transação já foi abortada pelo SQLite
+      }
       throw error;
     }
   }
 
   public persist(): void {
+    if (this.inTransaction) return;
     if (this.dbPath && this.dbPath !== ':memory:') {
       const data = this.db.export();
       const buffer = Buffer.from(data);
